@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Geocoder
 import android.location.Location
+import android.location.LocationListener
+import android.os.Bundle
 import android.os.Looper
 import com.example.security.AntiFakeLocationDetector
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -14,6 +16,7 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,43 +31,126 @@ class LocationManager(private val context: Context, private val scope: Coroutine
     private val fusedClient: FusedLocationProviderClient =
         LocationServices.getFusedLocationProviderClient(context)
 
-    private val _locationData = MutableStateFlow(LiveLocationData())
-    val locationData: StateFlow<LiveLocationData> = _locationData.asStateFlow()
+    private val sysLocationManager: android.location.LocationManager? =
+        context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
 
-    private val timeFormat = SimpleDateFormat("HH:mm", Locale("id", "ID"))
+    // Format waktu lengkap dengan detik (HH:mm:ss) agar aktif berdetak real-time!
+    private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale("id", "ID"))
     private val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale("id", "ID"))
 
+    private var lastRawLocation: Location? = null
     private var lastRealLat: Double = -6.175392
     private var lastRealLon: Double = 106.827153
     private var lastRealAddr: String = "Jl. Raya No. 1, Jakarta, Indonesia"
 
-    private val locationCallback = object : LocationCallback() {
+    // Initialize with REAL CURRENT SYSTEM TIME & DATE immediately!
+    private val initialNow = Date()
+    private val initialSecurity = AntiFakeLocationDetector.analyzeLocation(context, null)
+
+    private val _locationData = MutableStateFlow(
+        LiveLocationData(
+            latitude = lastRealLat,
+            longitude = lastRealLon,
+            realLatitude = lastRealLat,
+            realLongitude = lastRealLon,
+            address = lastRealAddr,
+            realAddress = lastRealAddr,
+            formattedTime = timeFormat.format(initialNow),
+            formattedDate = dateFormat.format(initialNow),
+            securityResult = initialSecurity
+        )
+    )
+    val locationData: StateFlow<LiveLocationData> = _locationData.asStateFlow()
+
+    private val fusedLocationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             result.lastLocation?.let { updateLocation(it) }
         }
     }
 
+    private val nativeLocationListener = object : LocationListener {
+        override fun onLocationChanged(location: Location) {
+            updateLocation(location)
+        }
+        @Deprecated("Deprecated in Java")
+        override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+        override fun onProviderEnabled(provider: String) {}
+        override fun onProviderDisabled(provider: String) {}
+    }
+
+    init {
+        // Continuous 1-second real-time clock ticker & dynamic anti-fake security check
+        scope.launch {
+            while (true) {
+                val now = Date()
+                val curTime = timeFormat.format(now)
+                val curDate = dateFormat.format(now)
+                val sec = AntiFakeLocationDetector.analyzeLocation(context, lastRawLocation)
+
+                val current = _locationData.value
+                _locationData.value = current.copy(
+                    formattedTime = curTime,
+                    formattedDate = curDate,
+                    securityResult = sec
+                )
+                delay(1000)
+            }
+        }
+    }
+
     @SuppressLint("MissingPermission")
     fun startLocationUpdates() {
+        // 1. Google Play Services Fused Location
         try {
-            val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 3000)
-                .setMinUpdateIntervalMillis(1500)
+            val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 2000)
+                .setMinUpdateIntervalMillis(1000)
                 .build()
 
-            fusedClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
+            fusedClient.requestLocationUpdates(request, fusedLocationCallback, Looper.getMainLooper())
             fusedClient.lastLocation.addOnSuccessListener { loc ->
                 loc?.let { updateLocation(it) }
+            }
+        } catch (_: Exception) {}
+
+        // 2. Dual Provider Fallback: Native Android LocationManager (GPS & Network)
+        try {
+            sysLocationManager?.let { lm ->
+                if (lm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)) {
+                    lm.requestLocationUpdates(
+                        android.location.LocationManager.GPS_PROVIDER,
+                        1000L,
+                        1f,
+                        nativeLocationListener,
+                        Looper.getMainLooper()
+                    )
+                }
+                if (lm.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)) {
+                    lm.requestLocationUpdates(
+                        android.location.LocationManager.NETWORK_PROVIDER,
+                        1000L,
+                        1f,
+                        nativeLocationListener,
+                        Looper.getMainLooper()
+                    )
+                }
+                val lastKnownGps = lm.getLastKnownLocation(android.location.LocationManager.GPS_PROVIDER)
+                val lastKnownNet = lm.getLastKnownLocation(android.location.LocationManager.NETWORK_PROVIDER)
+                (lastKnownGps ?: lastKnownNet)?.let { updateLocation(it) }
             }
         } catch (_: Exception) {}
     }
 
     fun stopLocationUpdates() {
         try {
-            fusedClient.removeLocationUpdates(locationCallback)
+            fusedClient.removeLocationUpdates(fusedLocationCallback)
+        } catch (_: Exception) {}
+        try {
+            sysLocationManager?.removeUpdates(nativeLocationListener)
         } catch (_: Exception) {}
     }
 
     private fun updateLocation(loc: Location) {
+        lastRawLocation = loc
         val now = Date()
         val formattedTime = timeFormat.format(now)
         val formattedDate = dateFormat.format(now)
@@ -102,11 +188,11 @@ class LocationManager(private val context: Context, private val scope: Coroutine
             val list = geocoder.getFromLocation(lat, lon, 1)
             if (!list.isNullOrEmpty()) {
                 val addr = list[0]
-                val sb = StringBuilder()
                 val line = addr.getAddressLine(0)
                 if (!line.isNullOrEmpty()) {
                     return@withContext line
                 }
+                val sb = StringBuilder()
                 addr.subLocality?.let { sb.append(it).append(", ") }
                 addr.locality?.let { sb.append(it).append(", ") }
                 addr.subAdminArea?.let { sb.append(it).append(", ") }
@@ -115,6 +201,6 @@ class LocationManager(private val context: Context, private val scope: Coroutine
                 return@withContext sb.toString().trim().trimEnd(',')
             }
         } catch (_: Exception) {}
-        "Jl. Raya No. 1, Jakarta, Indonesia"
+        "Gg. Kuncir No.27, Jatirasa, Kec. Jatiasih, Kota Bks, Jawa Barat 17424"
     }
 }

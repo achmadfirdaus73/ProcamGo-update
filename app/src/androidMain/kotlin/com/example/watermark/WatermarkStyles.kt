@@ -8,6 +8,8 @@ import android.text.TextPaint
 import com.example.location.LiveLocationData
 import com.example.location.MapTileHelper
 import com.example.security.SecurityCheckResult
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 object WatermarkStyles {
@@ -117,21 +119,21 @@ object WatermarkStyles {
 
         val clockPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
-            textSize = 58f * s
+            textSize = 42f * s
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             setShadowLayer(8f * s, 0f, 3f * s, Color.argb(180, 0, 0, 0))
         }
-        canvas.drawText(loc.formattedTime.ifEmpty { "21:39" }, cardRect.left + pad, cardRect.top + pad + 80f * s, clockPaint)
+        canvas.drawText(getDisplayTime(loc), cardRect.left + pad, cardRect.top + pad + 80f * s, clockPaint)
 
         val datePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#E2E8F0")
             textSize = 20f * s
             setShadowLayer(5f * s, 0f, 2f * s, Color.argb(150, 0, 0, 0))
         }
-        canvas.drawText(loc.formattedDate.ifEmpty { "13 Okt 2026" }, cardRect.left + pad, cardRect.top + pad + 118f * s, datePaint)
+        canvas.drawText(getDisplayDate(loc), cardRect.left + pad, cardRect.top + pad + 118f * s, datePaint)
 
-        // ASLI Pill
-        drawSmallShieldPill(canvas, cardRect.left + pad, cardRect.top + pad + 138f * s, "ASLI", s)
+        // ASLI / Security Pill
+        drawSmallShieldPill(canvas, cardRect.left + pad, cardRect.top + pad + 138f * s, sec, "ASLI", s)
 
         // Vertical divider line
         val divPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -222,20 +224,20 @@ object WatermarkStyles {
 
         val clockPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
-            textSize = 60f * s
+            textSize = 44f * s
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             setShadowLayer(8f * s, 0f, 3f * s, Color.argb(180, 0, 0, 0))
         }
-        canvas.drawText(loc.formattedTime.ifEmpty { "21:39" }, cardRect.left + pad, cardRect.top + pad + 82f * s, clockPaint)
+        canvas.drawText(getDisplayTime(loc), cardRect.left + pad, cardRect.top + pad + 82f * s, clockPaint)
 
         val datePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#E2E8F0")
             textSize = 20f * s
             setShadowLayer(5f * s, 0f, 2f * s, Color.argb(150, 0, 0, 0))
         }
-        canvas.drawText(loc.formattedDate.ifEmpty { "13 Okt 2026" }, cardRect.left + pad, cardRect.top + pad + 118f * s, datePaint)
+        canvas.drawText(getDisplayDate(loc), cardRect.left + pad, cardRect.top + pad + 118f * s, datePaint)
 
-        drawFilledSecurityPill(canvas, cardRect.left + pad, cardRect.top + pad + 136f * s, "ASLI TERVERIFIKASI", s)
+        drawFilledSecurityPill(canvas, cardRect.left + pad, cardRect.top + pad + 136f * s, sec, "ASLI TERVERIFIKASI", s)
 
         // Top Right: BIGGER 3D Isometric Map Box
         val mapBoxW = 210f * s
@@ -329,7 +331,7 @@ object WatermarkStyles {
         val rightRadius = 28f * s
         val rightCx = cardRect.right - 20f * s - rightRadius
         val rightCy = cardRect.centerY()
-        drawCheckmarkShieldCircle(canvas, rightCx, rightCy, rightRadius, s)
+        drawCheckmarkShieldCircle(canvas, rightCx, rightCy, rightRadius, sec, s)
 
         // Center Content (Larger text)
         val textLeft = circleCx + circleRadius + 16f * s
@@ -351,7 +353,7 @@ object WatermarkStyles {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             setShadowLayer(5f * s, 0f, 2f * s, Color.argb(160, 0, 0, 0))
         }
-        val timeDateStr = "${loc.formattedTime.ifEmpty { "21:39" }} • ${loc.formattedDate.ifEmpty { "13 Okt 2026" }}"
+        val timeDateStr = "${getDisplayTime(loc)} • ${getDisplayDate(loc)}"
         canvas.drawText(timeDateStr, textLeft + tagW, cardRect.top + 40f * s, timePaint)
 
         val addrPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -457,11 +459,11 @@ object WatermarkStyles {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             setShadowLayer(5f * s, 0f, 2f * s, Color.argb(160, 0, 0, 0))
         }
-        val tStr = "${loc.formattedTime.ifEmpty { "21:39" }} • ${loc.formattedDate.ifEmpty { "13 Okt 2026" }}"
+        val tStr = "${getDisplayTime(loc)} • ${getDisplayDate(loc)}"
         canvas.drawText(tStr, mainRect.left + pad + tagW, mainRect.top + pad + 18f * s, timePaint)
         val timeW = timePaint.measureText(tStr)
 
-        drawSmallShieldPill(canvas, mainRect.left + pad + tagW + timeW + 14f * s, mainRect.top + pad - 2f * s, "ASLI", s)
+        drawSmallShieldPill(canvas, mainRect.left + pad + tagW + timeW + 14f * s, mainRect.top + pad - 2f * s, sec, "ASLI", s)
 
         val addrPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#F1F5F9")
@@ -521,18 +523,18 @@ object WatermarkStyles {
 
         val clockPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
-            textSize = 50f * s
+            textSize = 38f * s
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             setShadowLayer(6f * s, 0f, 3f * s, Color.argb(160, 0, 0, 0))
         }
-        canvas.drawText(loc.formattedTime.ifEmpty { "21:39" }, topRect.left + 18f * s, topRect.top + 88f * s, clockPaint)
+        canvas.drawText(getDisplayTime(loc), topRect.left + 18f * s, topRect.top + 88f * s, clockPaint)
 
         val datePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#E2E8F0")
             textSize = 18f * s
             setShadowLayer(4f * s, 0f, 2f * s, Color.argb(150, 0, 0, 0))
         }
-        canvas.drawText(loc.formattedDate.ifEmpty { "13 Okt 2026" }, topRect.left + 18f * s, topRect.top + 120f * s, datePaint)
+        canvas.drawText(getDisplayDate(loc), topRect.left + 18f * s, topRect.top + 120f * s, datePaint)
 
         // 2. Bottom-Right Card: BIGGER Real OpenStreetMap
         val mapSize = 160f * s
@@ -632,13 +634,13 @@ object WatermarkStyles {
             textSize = 26f * s
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
-        canvas.drawText(loc.formattedTime.ifEmpty { "21:39" }, rightLeft + tagW, cardRect.top + 42f * s, clockPaint)
+        canvas.drawText(getDisplayTime(loc), rightLeft + tagW, cardRect.top + 42f * s, clockPaint)
 
         val datePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#475569")
             textSize = 17f * s
         }
-        canvas.drawText(loc.formattedDate.ifEmpty { "13 Okt 2026" }, rightLeft, cardRect.top + 68f * s, datePaint)
+        canvas.drawText(getDisplayDate(loc), rightLeft, cardRect.top + 68f * s, datePaint)
 
         val addrPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#1E293B")
@@ -652,12 +654,14 @@ object WatermarkStyles {
         addrLayout.draw(canvas)
         canvas.restore()
 
-        val greenTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#059669")
+        val isTampered = !sec.isAuthentic || sec.isMockDetected || sec.isTimeManipulated
+        val secTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (isTampered) Color.parseColor("#EF4444") else Color.parseColor("#059669")
             textSize = 16f * s
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
-        canvas.drawText("✓ Asli terverifikasi", rightLeft, cardRect.bottom - 20f * s, greenTextPaint)
+        val secLabel = if (isTampered) "⚠️ FAKE GPS / TAMPERED" else "✓ Asli terverifikasi"
+        canvas.drawText(secLabel, rightLeft, cardRect.bottom - 20f * s, secTextPaint)
 
         val tokenPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#475569")
@@ -711,10 +715,10 @@ object WatermarkStyles {
         }
         canvas.drawText(cfg.tagLabel.uppercase(Locale.ROOT), stripRect.centerX(), mapRect.bottom + 32f * s, tagPaint)
 
-        // Stacked numbers: 21 on top, 39 below (BIGGER)
-        val timeParts = loc.formattedTime.ifEmpty { "21:39" }.split(":")
-        val hour = if (timeParts.isNotEmpty()) timeParts[0] else "21"
-        val min = if (timeParts.size > 1) timeParts[1] else "39"
+        // Stacked numbers: HH on top, mm below
+        val timeParts = getDisplayTime(loc).split(":")
+        val hour = if (timeParts.isNotEmpty()) timeParts[0] else SimpleDateFormat("HH", Locale.ROOT).format(Date())
+        val min = if (timeParts.size > 1) timeParts[1] else SimpleDateFormat("mm", Locale.ROOT).format(Date())
 
         val numPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
@@ -732,10 +736,10 @@ object WatermarkStyles {
             textAlign = Paint.Align.CENTER
             setShadowLayer(4f * s, 0f, 2f * s, Color.argb(150, 0, 0, 0))
         }
-        val dateText = loc.formattedDate.ifEmpty { "13 Okt 2026" }.replace(" 2026", "")
+        val dateText = getDisplayDate(loc).replace(" 2026", "")
         canvas.drawText(dateText, stripRect.centerX(), mapRect.bottom + 164f * s, datePaint)
 
-        drawCheckmarkShieldCircle(canvas, stripRect.centerX(), stripRect.bottom - 42f * s, 26f * s, s)
+        drawCheckmarkShieldCircle(canvas, stripRect.centerX(), stripRect.bottom - 42f * s, 26f * s, sec, s)
 
         // Right Bottom Info Card
         val infoLeft = stripRect.right + 16f * s
@@ -795,7 +799,7 @@ object WatermarkStyles {
         val sealCx = margin + sealRadius
         val sealCy = h - margin - cardH / 2f
 
-        drawCryptoSealStamp(canvas, sealCx, sealCy, sealRadius, s, mapTile)
+        drawCryptoSealStamp(canvas, sealCx, sealCy, sealRadius, s, mapTile, sec)
 
         val cardLeft = sealCx + sealRadius + 16f * s
         val cardRect = RectF(cardLeft, h - margin - cardH, w - margin, h - margin)
@@ -824,14 +828,14 @@ object WatermarkStyles {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             setShadowLayer(5f * s, 0f, 2f * s, Color.argb(160, 0, 0, 0))
         }
-        canvas.drawText(loc.formattedTime.ifEmpty { "21:39" }, cardRect.left + pad + tagW, cardRect.top + pad + 18f * s, clockPaint)
+        canvas.drawText(getDisplayTime(loc), cardRect.left + pad + tagW, cardRect.top + pad + 18f * s, clockPaint)
 
         val datePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#CBD5E1")
             textSize = 17f * s
             setShadowLayer(4f * s, 0f, 2f * s, Color.argb(150, 0, 0, 0))
         }
-        canvas.drawText(loc.formattedDate.ifEmpty { "13 Okt 2026" }, cardRect.left + pad, cardRect.top + pad + 44f * s, datePaint)
+        canvas.drawText(getDisplayDate(loc), cardRect.left + pad, cardRect.top + pad + 44f * s, datePaint)
 
         val addrPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#F8FAFC")
@@ -860,77 +864,127 @@ object WatermarkStyles {
     // ==========================================
     // HELPER BADGES & SEALS
     // ==========================================
-    private fun drawSmallShieldPill(canvas: Canvas, x: Float, y: Float, text: String, s: Float) {
+    private fun getDisplayTime(loc: LiveLocationData): String {
+        return loc.formattedTime.ifEmpty {
+            SimpleDateFormat("HH:mm:ss", Locale("id", "ID")).format(Date())
+        }
+    }
+
+    private fun getDisplayDate(loc: LiveLocationData): String {
+        return loc.formattedDate.ifEmpty {
+            SimpleDateFormat("dd MMM yyyy", Locale("id", "ID")).format(Date())
+        }
+    }
+
+    private fun drawSmallShieldPill(canvas: Canvas, x: Float, y: Float, sec: SecurityCheckResult, defaultText: String, s: Float) {
+        val isTampered = !sec.isAuthentic || sec.isMockDetected || sec.isTimeManipulated
+        val text = when {
+            sec.isMockDetected && sec.isTimeManipulated -> "⚠️ FAKE GPS & WAKTU"
+            sec.isMockDetected -> "⚠️ FAKE GPS"
+            sec.isTimeManipulated -> "⚠️ WAKTU PALSU"
+            else -> "🛡️ $defaultText"
+        }
+        val strokeColor = if (isTampered) Color.parseColor("#EF4444") else Color.parseColor("#10B981")
+        val textColor = if (isTampered) Color.parseColor("#FCA5A5") else Color.parseColor("#34D399")
+        val bgColor = if (isTampered) Color.argb(210, 127, 29, 29) else Color.TRANSPARENT
+
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = textColor
+            textSize = 14f * s
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val textW = textPaint.measureText(text)
+        val pillRect = RectF(x, y, x + textW + 16f * s, y + 26f * s)
+
+        if (bgColor != Color.TRANSPARENT) {
+            val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = bgColor
+                style = Paint.Style.FILL
+            }
+            canvas.drawRoundRect(pillRect, 13f * s, 13f * s, bgPaint)
+        }
+
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#10B981")
+            color = strokeColor
             style = Paint.Style.STROKE
             strokeWidth = 1.5f * s
         }
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#34D399")
-            textSize = 14f * s
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        }
-        val textW = textPaint.measureText("🛡️ $text")
-        val pillRect = RectF(x, y, x + textW + 16f * s, y + 26f * s)
         canvas.drawRoundRect(pillRect, 13f * s, 13f * s, paint)
-        canvas.drawText("🛡️ $text", x + 8f * s, y + 18.5f * s, textPaint)
+        canvas.drawText(text, x + 8f * s, y + 18.5f * s, textPaint)
     }
 
-    private fun drawFilledSecurityPill(canvas: Canvas, x: Float, y: Float, text: String, s: Float) {
+    private fun drawFilledSecurityPill(canvas: Canvas, x: Float, y: Float, sec: SecurityCheckResult, defaultText: String, s: Float) {
+        val isTampered = !sec.isAuthentic || sec.isMockDetected || sec.isTimeManipulated
+        val text = when {
+            sec.isMockDetected && sec.isTimeManipulated -> "⚠️ FAKE GPS & WAKTU"
+            sec.isMockDetected -> "⚠️ FAKE GPS"
+            sec.isTimeManipulated -> "⚠️ WAKTU PALSU"
+            else -> "🛡️ $defaultText"
+        }
+        val bgColor = if (isTampered) Color.argb(220, 127, 29, 29) else Color.argb(210, 6, 78, 59)
+        val textColor = if (isTampered) Color.parseColor("#FCA5A5") else Color.parseColor("#6EE7B7")
+
         val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(210, 6, 78, 59)
+            color = bgColor
             style = Paint.Style.FILL
         }
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#6EE7B7")
+            color = textColor
             textSize = 14f * s
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
-        val textW = textPaint.measureText("🛡️ $text")
+        val textW = textPaint.measureText(text)
         val pillRect = RectF(x, y, x + textW + 18f * s, y + 28f * s)
         canvas.drawRoundRect(pillRect, 14f * s, 14f * s, bgPaint)
-        canvas.drawText("🛡️ $text", x + 9f * s, y + 19.5f * s, textPaint)
+        canvas.drawText(text, x + 9f * s, y + 19.5f * s, textPaint)
     }
 
-    private fun drawCheckmarkShieldCircle(canvas: Canvas, cx: Float, cy: Float, r: Float, s: Float) {
+    private fun drawCheckmarkShieldCircle(canvas: Canvas, cx: Float, cy: Float, r: Float, sec: SecurityCheckResult, s: Float) {
+        val isTampered = !sec.isAuthentic || sec.isMockDetected || sec.isTimeManipulated
         val circlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(175, 15, 23, 42)
+            color = if (isTampered) Color.argb(220, 127, 29, 29) else Color.argb(175, 15, 23, 42)
             style = Paint.Style.FILL
         }
         canvas.drawCircle(cx, cy, r, circlePaint)
 
         val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#10B981")
+            color = if (isTampered) Color.parseColor("#EF4444") else Color.parseColor("#10B981")
             style = Paint.Style.STROKE
             strokeWidth = 2.2f * s
         }
         canvas.drawCircle(cx, cy, r, strokePaint)
 
-        val checkPath = Path().apply {
-            moveTo(cx - 9f * s, cy - 1f * s)
-            lineTo(cx - 2f * s, cy + 7f * s)
-            lineTo(cx + 9f * s, cy - 7f * s)
-        }
         val checkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#10B981")
+            color = if (isTampered) Color.parseColor("#FCA5A5") else Color.parseColor("#10B981")
             style = Paint.Style.STROKE
             strokeWidth = 2.8f * s
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
         }
-        canvas.drawPath(checkPath, checkPaint)
+
+        if (isTampered) {
+            canvas.drawLine(cx, cy - r * 0.45f, cx, cy + r * 0.1f, checkPaint)
+            canvas.drawPoint(cx, cy + r * 0.45f, checkPaint.apply { strokeWidth = 4.5f * s })
+        } else {
+            val checkPath = Path().apply {
+                moveTo(cx - 9f * s, cy - 1f * s)
+                lineTo(cx - 2f * s, cy + 7f * s)
+                lineTo(cx + 9f * s, cy - 7f * s)
+            }
+            canvas.drawPath(checkPath, checkPaint)
+        }
     }
 
-    private fun drawCryptoSealStamp(canvas: Canvas, cx: Float, cy: Float, r: Float, s: Float, mapTile: Bitmap?) {
+    private fun drawCryptoSealStamp(canvas: Canvas, cx: Float, cy: Float, r: Float, s: Float, mapTile: Bitmap?, sec: SecurityCheckResult) {
+        val isTampered = !sec.isAuthentic || sec.isMockDetected || sec.isTimeManipulated
         val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(175, 15, 23, 42)
+            color = if (isTampered) Color.argb(230, 69, 10, 10) else Color.argb(175, 15, 23, 42)
             style = Paint.Style.FILL
         }
         canvas.drawCircle(cx, cy, r, bgPaint)
 
         val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#10B981")
+            color = if (isTampered) Color.parseColor("#EF4444") else Color.parseColor("#10B981")
             style = Paint.Style.STROKE
             strokeWidth = 2.5f * s
         }
@@ -951,11 +1005,12 @@ object WatermarkStyles {
             addCircle(cx, cy, r - 14f * s, Path.Direction.CW)
         }
         val stampTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#6EE7B7")
+            color = if (isTampered) Color.parseColor("#FCA5A5") else Color.parseColor("#6EE7B7")
             textSize = 11.5f * s
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             letterSpacing = 0.18f
         }
-        canvas.drawTextOnPath("LIVE ENCRYPTED • ASLI TERVERIFIKASI •", textPath, 0f, 0f, stampTextPaint)
+        val stampText = if (isTampered) "⚠️ FAKE GPS / TAMPERED • BAHAYA •" else "LIVE ENCRYPTED • ASLI TERVERIFIKASI •"
+        canvas.drawTextOnPath(stampText, textPath, 0f, 0f, stampTextPaint)
     }
 }

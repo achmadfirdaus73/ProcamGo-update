@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -29,8 +30,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.location.LiveLocationData
+import com.example.security.SecurityCheckResult
 import com.example.watermark.IsometricMapDrawer
 import com.example.watermark.WatermarkStyle
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 @Composable
@@ -51,6 +55,55 @@ fun WatermarkOverlayView(
         WatermarkStyle.VERTICAL_STRIP -> Design7Overlay(locationData, tagLabel, mapBitmap, modifier)
         WatermarkStyle.CRYPTO_SEAL -> Design8Overlay(locationData, tagLabel, mapBitmap, modifier)
     }
+}
+
+/**
+ * Reusable dynamic Security Badge for Anti-Fake GPS & Tamper Detection.
+ * Displays vibrant green when authentic, and striking red when mock GPS or manual time manipulation is detected.
+ */
+@Composable
+fun SecurityBadge(
+    sec: SecurityCheckResult,
+    modifier: Modifier = Modifier,
+    isFilled: Boolean = false
+) {
+    val isTampered = !sec.isAuthentic || sec.isMockDetected || sec.isTimeManipulated
+    val label = when {
+        sec.isMockDetected && sec.isTimeManipulated -> "⚠️ FAKE GPS & WAKTU"
+        sec.isMockDetected -> "⚠️ FAKE GPS"
+        sec.isTimeManipulated -> "⚠️ WAKTU PALSU"
+        else -> if (isFilled) "🛡️ ASLI TERVERIFIKASI" else "🛡️ ASLI"
+    }
+    val borderColor = if (isTampered) Color(0xFFEF4444) else Color(0xFF10B981)
+    val textColor = if (isTampered) Color(0xFFFCA5A5) else Color(0xFF34D399)
+    val bgColor = if (isFilled) {
+        if (isTampered) Color(0xCC7F1D1D) else Color(0xCC064E3B)
+    } else {
+        if (isTampered) Color(0x997F1D1D) else Color.Transparent
+    }
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(bgColor)
+            .border(1.2.dp, borderColor, RoundedCornerShape(8.dp))
+            .padding(horizontal = 7.dp, vertical = 2.5.dp)
+    ) {
+        Text(
+            text = label,
+            color = textColor,
+            fontSize = 9.5.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+private fun getSafeTime(loc: LiveLocationData): String {
+    return loc.formattedTime.ifEmpty { SimpleDateFormat("HH:mm:ss", Locale("id", "ID")).format(Date()) }
+}
+
+private fun getSafeDate(loc: LiveLocationData): String {
+    return loc.formattedDate.ifEmpty { SimpleDateFormat("dd MMM yyyy", Locale("id", "ID")).format(Date()) }
 }
 
 /**
@@ -83,7 +136,7 @@ private fun RealOsmMapCanvas(
             CircularProgressIndicator(
                 modifier = Modifier.size(24.dp),
                 strokeWidth = 2.dp,
-                color = Color(0xFF38BDF8)
+                color = Color(0xFF0284C7)
             )
         }
     }
@@ -123,7 +176,7 @@ private fun Design1Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.width(130.dp)) {
+            Column(modifier = Modifier.width(145.dp)) {
                 Text(
                     text = tag.uppercase(Locale.ROOT),
                     color = Color(0xFF38BDF8),
@@ -133,27 +186,21 @@ private fun Design1Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
                     maxLines = 1
                 )
                 Text(
-                    text = loc.formattedTime.ifEmpty { "21:39" },
+                    text = getSafeTime(loc),
                     color = Color.White,
-                    fontSize = 36.sp,
+                    fontSize = 26.sp,
                     fontWeight = FontWeight.Black,
-                    lineHeight = 38.sp
+                    lineHeight = 28.sp,
+                    maxLines = 1
                 )
                 Text(
-                    text = loc.formattedDate.ifEmpty { "13 Okt 2026" },
+                    text = getSafeDate(loc),
                     color = Color(0xFFE2E8F0),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .border(1.2.dp, Color(0xFF10B981), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                ) {
-                    Text("🛡️ ASLI", color = Color(0xFF34D399), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                }
+                SecurityBadge(sec = loc.securityResult)
             }
 
             Box(
@@ -214,22 +261,14 @@ private fun Design2Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(tag.uppercase(Locale.ROOT), color = Color(0xFF38BDF8), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Text(loc.formattedTime.ifEmpty { "21:39" }, color = Color.White, fontSize = 38.sp, fontWeight = FontWeight.Black, lineHeight = 40.sp)
-                Text(loc.formattedDate.ifEmpty { "13 Okt 2026" }, color = Color(0xFFE2E8F0), fontSize = 13.5.sp)
+                Text(getSafeTime(loc), color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black, lineHeight = 30.sp, maxLines = 1)
+                Text(getSafeDate(loc), color = Color(0xFFE2E8F0), fontSize = 13.5.sp)
                 Spacer(modifier = Modifier.height(4.dp))
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xCC064E3B))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                ) {
-                    Text("🛡️ ASLI TERVERIFIKASI", color = Color(0xFF6EE7B7), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                }
+                SecurityBadge(sec = loc.securityResult, isFilled = true)
             }
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // LARGER Real OpenStreetMap Box (3D Isometric)
             RealOsmMapCanvas(
                 mapBitmap = mapBitmap,
                 modifier = Modifier.size(width = 125.dp, height = 94.dp),
@@ -250,31 +289,32 @@ private fun Design2Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
         val lonStr = String.format(Locale.US, "%.6f", loc.longitude).replace('.', ',')
         Text(
             text = "$latStr, $lonStr   SIG: #${loc.securityResult.signatureToken}",
-            color = Color(0xFFE2E8F0),
-            fontSize = 11.5.sp,
+            color = Color(0xFF38BDF8),
+            fontSize = 13.sp,
             fontWeight = FontWeight.Bold
         )
     }
 }
 
 // -------------------------------------------------------------
-// DESAIN 3: Kapsul Minimalis Horizontal (Peta & Teks Besar)
+// DESAIN 3: Kapsul Minimalis (Peta Lingkaran Besar & Teks Besar)
 // -------------------------------------------------------------
 @Composable
 private fun Design3Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap?, modifier: Modifier) {
+    val isTampered = !loc.securityResult.isAuthentic || loc.securityResult.isMockDetected || loc.securityResult.isTimeManipulated
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(CircleShape)
-            .background(Color(0x941E293B))
-            .border(1.2.dp, Color(0x44FFFFFF), CircleShape)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .clip(RoundedCornerShape(32.dp))
+            .background(Color(0x940F172A))
+            .border(1.2.dp, Color(0x44FFFFFF), RoundedCornerShape(32.dp))
+            .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // LARGER circle containing REAL OpenStreetMap
+        // Circular Real OpenStreetMap
         Box(
             modifier = Modifier
-                .size(56.dp)
+                .size(62.dp)
                 .clip(CircleShape)
                 .background(Color(0xC4FFFFFF)),
             contentAlignment = Alignment.Center
@@ -296,7 +336,7 @@ private fun Design3Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(tag.uppercase(Locale.ROOT), color = Color(0xFF38BDF8), fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
                 Text(" • ", color = Color.White, fontSize = 12.sp)
-                Text("${loc.formattedTime.ifEmpty { "21:39" }} • ${loc.formattedDate.ifEmpty { "13 Okt 2026" }}", color = Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                Text("${getSafeTime(loc)} • ${getSafeDate(loc)}", color = Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
             }
             Text(
                 text = loc.address.ifEmpty { "Gg. Kuncir No.27, Jatirasa, Jatiasih, Kota Bks" },
@@ -316,11 +356,16 @@ private fun Design3Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
             modifier = Modifier
                 .size(38.dp)
                 .clip(CircleShape)
-                .background(Color(0xCC0F172A))
-                .border(1.5.dp, Color(0xFF10B981), CircleShape),
+                .background(if (isTampered) Color(0xCC7F1D1D) else Color(0xCC0F172A))
+                .border(1.5.dp, if (isTampered) Color(0xFFEF4444) else Color(0xFF10B981), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Check, contentDescription = "OK", tint = Color(0xFF10B981), modifier = Modifier.size(20.dp))
+            Icon(
+                imageVector = if (isTampered) Icons.Default.Warning else Icons.Default.Check,
+                contentDescription = if (isTampered) "Peringatan" else "OK",
+                tint = if (isTampered) Color(0xFFFCA5A5) else Color(0xFF10B981),
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }
@@ -334,7 +379,7 @@ private fun Design4Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.End
     ) {
-        // Floating Top-Right Map Tab (Melayang di atas card pada pojok kanan, tanpa menabrak card)
+        // Floating Top-Right Map Tab
         RealOsmMapCanvas(
             mapBitmap = mapBitmap,
             modifier = Modifier
@@ -346,7 +391,7 @@ private fun Design4Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
             isIsometric = true
         )
 
-        Spacer(modifier = Modifier.height(10.dp)) // Jarak pemisah bersih agar tidak tertabrak card di bawahnya
+        Spacer(modifier = Modifier.height(10.dp))
 
         // Main Translucent Dark Card
         Column(
@@ -365,16 +410,9 @@ private fun Design4Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(tag.uppercase(Locale.ROOT), color = Color(0xFF38BDF8), fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("${loc.formattedTime.ifEmpty { "21:39" }} • ${loc.formattedDate.ifEmpty { "13 Okt 2026" }}", color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
+                    Text("${getSafeTime(loc)} • ${getSafeDate(loc)}", color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
                 }
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .border(1.2.dp, Color(0xFF10B981), RoundedCornerShape(10.dp))
-                        .padding(horizontal = 8.dp, vertical = 2.5.dp)
-                ) {
-                    Text("🛡️ ASLI", color = Color(0xFF34D399), fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
-                }
+                SecurityBadge(sec = loc.securityResult)
             }
 
             Spacer(modifier = Modifier.height(6.dp))
@@ -399,7 +437,6 @@ private fun Design4Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
     }
 }
 
-
 // -------------------------------------------------------------
 // DESAIN 5: Pecah Tiga (Peta Sudut Besar & Teks Besar)
 // -------------------------------------------------------------
@@ -420,6 +457,17 @@ private fun Design5Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
                     .border(1.2.dp, Color(0x44FFFFFF), RoundedCornerShape(16.dp))
                     .padding(14.dp)
             ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val latStr = String.format(Locale.US, "%.6f", loc.latitude).replace('.', ',')
+                    val lonStr = String.format(Locale.US, "%.6f", loc.longitude).replace('.', ',')
+                    Text("$latStr, $lonStr", color = Color(0xFF38BDF8), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    SecurityBadge(sec = loc.securityResult)
+                }
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = loc.address.ifEmpty { "Gg. Kuncir No.27, RT.004/RW.002, Jatirasa, Kec. Jatiasih, Kota Bks, Jawa Barat 17424" },
                     color = Color(0xFFF8FAFC),
@@ -428,10 +476,6 @@ private fun Design5Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                val latStr = String.format(Locale.US, "%.6f", loc.latitude).replace('.', ',')
-                val lonStr = String.format(Locale.US, "%.6f", loc.longitude).replace('.', ',')
-                Text("$latStr, $lonStr", color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
             }
 
             // BIGGER Bottom-Right Real OpenStreetMap Box
@@ -467,12 +511,19 @@ private fun Design6Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
         Spacer(modifier = Modifier.width(14.dp))
 
         Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(tag.uppercase(Locale.ROOT), color = Color(0xFF1D4ED8), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(loc.formattedTime.ifEmpty { "21:39" }, color = Color(0xFF0F172A), fontSize = 18.sp, fontWeight = FontWeight.Black)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(tag.uppercase(Locale.ROOT), color = Color(0xFF1D4ED8), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(getSafeTime(loc), color = Color(0xFF0F172A), fontSize = 18.sp, fontWeight = FontWeight.Black)
+                }
+                SecurityBadge(sec = loc.securityResult)
             }
-            Text(loc.formattedDate.ifEmpty { "13 Okt 2026" }, color = Color(0xFF475569), fontSize = 11.5.sp)
+            Text(getSafeDate(loc), color = Color(0xFF475569), fontSize = 11.5.sp)
             Text(
                 text = loc.address.ifEmpty { "Gg. Kuncir No.27, RT.004/RW.002, Jatirasa, Kec. Jatiasih, Kota Bks, Jawa Barat 17424" },
                 color = Color(0xFF1E293B),
@@ -480,23 +531,24 @@ private fun Design6Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.height(3.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("✓ Asli terverifikasi", color = Color(0xFF059669), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Text("#${loc.securityResult.signatureToken}", color = Color(0xFF475569), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-            }
+            val latStr = String.format(Locale.US, "%.6f", loc.latitude).replace('.', ',')
+            val lonStr = String.format(Locale.US, "%.6f", loc.longitude).replace('.', ',')
+            Text(
+                text = "$latStr, $lonStr",
+                color = Color(0xFF1D4ED8),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
 
 // -------------------------------------------------------------
-// DESAIN 7: Strip Vertikal Kiri (Peta & Nomor Jam Besar)
+// DESAIN 7: Strip Vertikal Kiri (Peta & Jam Raksasa)
 // -------------------------------------------------------------
 @Composable
 private fun Design7Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap?, modifier: Modifier) {
+    val isTampered = !loc.securityResult.isAuthentic || loc.securityResult.isMockDetected || loc.securityResult.isTimeManipulated
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -505,7 +557,7 @@ private fun Design7Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
         // Vertical Strip (Widened & Enlarged)
         Column(
             modifier = Modifier
-                .width(82.dp)
+                .width(86.dp)
                 .clip(RoundedCornerShape(18.dp))
                 .background(Color(0x941E293B))
                 .border(1.2.dp, Color(0x44FFFFFF), RoundedCornerShape(18.dp))
@@ -514,17 +566,22 @@ private fun Design7Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
         ) {
             RealOsmMapCanvas(
                 mapBitmap = mapBitmap,
-                modifier = Modifier.size(58.dp),
+                modifier = Modifier.size(62.dp),
                 isIsometric = true
             )
             Spacer(modifier = Modifier.height(6.dp))
-            Text(tag.uppercase(Locale.ROOT), color = Color(0xFF38BDF8), fontSize = 10.5.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-            val parts = loc.formattedTime.ifEmpty { "21:39" }.split(":")
-            Text(if (parts.isNotEmpty()) parts[0] else "21", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black)
-            Text(if (parts.size > 1) parts[1] else "39", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black)
-            Text("13 Okt", color = Color(0xFFCBD5E1), fontSize = 10.sp)
+            Text(tag.uppercase(Locale.ROOT), color = Color(0xFF38BDF8), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            val parts = getSafeTime(loc).split(":")
+            Text(if (parts.isNotEmpty()) parts[0] else "12", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black)
+            Text(if (parts.size > 1) parts[1] else "00", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black)
+            Text(getSafeDate(loc).replace(" 2026", ""), color = Color(0xFFCBD5E1), fontSize = 10.sp)
             Spacer(modifier = Modifier.height(6.dp))
-            Icon(Icons.Default.Shield, contentDescription = "OK", tint = Color(0xFF10B981), modifier = Modifier.size(18.dp))
+            Icon(
+                imageVector = if (isTampered) Icons.Default.Warning else Icons.Default.Shield,
+                contentDescription = if (isTampered) "Peringatan" else "OK",
+                tint = if (isTampered) Color(0xFFEF4444) else Color(0xFF10B981),
+                modifier = Modifier.size(18.dp)
+            )
         }
 
         // Right Info Box
@@ -536,6 +593,17 @@ private fun Design7Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
                 .border(1.2.dp, Color(0x44FFFFFF), RoundedCornerShape(16.dp))
                 .padding(14.dp)
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val latStr = String.format(Locale.US, "%.6f", loc.latitude).replace('.', ',')
+                val lonStr = String.format(Locale.US, "%.6f", loc.longitude).replace('.', ',')
+                Text("$latStr, $lonStr", color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
+                SecurityBadge(sec = loc.securityResult)
+            }
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = loc.address.ifEmpty { "Gg. Kuncir No.27, RT.004/RW.002, Jatirasa, Kec. Jatiasih, Kota Bks, Jawa Barat 17424" },
                 color = Color(0xFFF8FAFC),
@@ -545,9 +613,6 @@ private fun Design7Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
                 overflow = TextOverflow.Ellipsis
             )
             Spacer(modifier = Modifier.height(4.dp))
-            val latStr = String.format(Locale.US, "%.6f", loc.latitude).replace('.', ',')
-            val lonStr = String.format(Locale.US, "%.6f", loc.longitude).replace('.', ',')
-            Text("$latStr, $lonStr", color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
             Text("SIG: #${loc.securityResult.signatureToken} • LIVE ENCRYPTED", color = Color(0xFFCBD5E1), fontSize = 9.5.sp, fontFamily = FontFamily.Monospace)
         }
     }
@@ -558,6 +623,7 @@ private fun Design7Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
 // -------------------------------------------------------------
 @Composable
 private fun Design8Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap?, modifier: Modifier) {
+    val isTampered = !loc.securityResult.isAuthentic || loc.securityResult.isMockDetected || loc.securityResult.isTimeManipulated
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -567,8 +633,8 @@ private fun Design8Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
             modifier = Modifier
                 .size(88.dp)
                 .clip(CircleShape)
-                .background(Color(0xCC0F172A))
-                .border(2.2.dp, Color(0xFF10B981), CircleShape)
+                .background(if (isTampered) Color(0xEE450A0A) else Color(0xCC0F172A))
+                .border(2.2.dp, if (isTampered) Color(0xFFEF4444) else Color(0xFF10B981), CircleShape)
                 .padding(6.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -602,12 +668,19 @@ private fun Design8Overlay(loc: LiveLocationData, tag: String, mapBitmap: Bitmap
                 .border(1.2.dp, Color(0x44FFFFFF), RoundedCornerShape(18.dp))
                 .padding(14.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(tag.uppercase(Locale.ROOT), color = Color(0xFF38BDF8), fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(loc.formattedTime.ifEmpty { "21:39" }, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(tag.uppercase(Locale.ROOT), color = Color(0xFF38BDF8), fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(getSafeTime(loc), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                }
+                SecurityBadge(sec = loc.securityResult)
             }
-            Text(loc.formattedDate.ifEmpty { "13 Okt 2026" }, color = Color(0xFFCBD5E1), fontSize = 11.5.sp)
+            Text(getSafeDate(loc), color = Color(0xFFCBD5E1), fontSize = 11.5.sp)
             Text(
                 text = loc.address.ifEmpty { "Gg. Kuncir No.27, Jatirasa, Jatiasih, Kota Bks" },
                 color = Color(0xFFF8FAFC),

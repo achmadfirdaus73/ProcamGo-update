@@ -22,7 +22,9 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.rememberScrollState
@@ -31,6 +33,8 @@ import com.example.MainViewModel
 import com.example.ui.components.CameraPreviewView
 import com.example.ui.components.WatermarkOverlayView
 import com.example.watermark.WatermarkStyle
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -51,6 +55,7 @@ fun CameraScreen(
     var noteText by remember { mutableStateOf("") }
     var showTagDialog by remember { mutableStateOf(false) }
     var showStylePicker by remember { mutableStateOf(false) }
+    var showSecurityDialog by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A))) {
         CameraPreviewView(
@@ -61,6 +66,9 @@ fun CameraScreen(
             },
             modifier = Modifier.fillMaxSize()
         )
+
+        val sec = locationData.securityResult
+        val isTampered = !sec.isAuthentic || sec.isMockDetected || sec.isTimeManipulated
 
         // Top Controls Bar
         Row(
@@ -90,6 +98,33 @@ fun CameraScreen(
                 )
             }
 
+            // Anti-Fake Security Status Chip
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(if (isTampered) Color(0xCC7F1D1D) else Color(0xCC064E3B))
+                    .border(1.dp, if (isTampered) Color(0xFFEF4444) else Color(0xFF10B981), RoundedCornerShape(20.dp))
+                    .clickable { showSecurityDialog = true }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .testTag("btn_security_status")
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (isTampered) Icons.Default.Warning else Icons.Default.Shield,
+                        contentDescription = "Status Keamanan",
+                        tint = if (isTampered) Color(0xFFFCA5A5) else Color(0xFF6EE7B7),
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (isTampered) "⚠️ PALSU" else "🛡️ ASLI",
+                        color = if (isTampered) Color(0xFFFCA5A5) else Color(0xFF6EE7B7),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
             // Quality Style Badge
             Box(
                 modifier = Modifier
@@ -108,19 +143,50 @@ fun CameraScreen(
                 )
             }
 
-            Row {
-                IconButton(
-                    onClick = { viewModel.toggleLensFacing() },
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(Color(0x660F172A))
-                        .testTag("btn_switch_camera")
+            IconButton(
+                onClick = { viewModel.toggleLensFacing() },
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(Color(0x660F172A))
+                    .testTag("btn_switch_camera")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Cameraswitch,
+                    contentDescription = "Switch Camera",
+                    tint = Color.White
+                )
+            }
+        }
+
+        // Prominent Warning Banner if Mock GPS or Time Tampered is detected!
+        if (isTampered) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xEE7F1D1D)),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.5.dp, Color(0xFFEF4444)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(top = 62.dp, start = 16.dp, end = 16.dp)
+                    .clickable { showSecurityDialog = true }
+                    .testTag("banner_tampered_warning")
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Cameraswitch,
-                        contentDescription = "Switch Camera",
-                        tint = Color.White
-                    )
+                    Icon(Icons.Default.Warning, contentDescription = "Peringatan", tint = Color(0xFFFCA5A5), modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        val title = when {
+                            sec.isMockDetected && sec.isTimeManipulated -> "PERINGATAN: FAKE GPS & WAKTU PALSU!"
+                            sec.isMockDetected -> "PERINGATAN: FAKE GPS / MOCK LOCATION!"
+                            else -> "PERINGATAN: WAKTU PERANGKAT DIMANIPULASI!"
+                        }
+                        Text(title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black)
+                        val anomalyText = sec.detectedAnomalies.firstOrNull() ?: "Lokasi atau jam perangkat tidak valid"
+                        Text(anomalyText, color = Color(0xFFFECACA), fontSize = 10.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }
         }
@@ -130,7 +196,7 @@ fun CameraScreen(
             Box(
                 modifier = Modifier
                     .statusBarsPadding()
-                    .padding(top = 64.dp, start = 16.dp)
+                    .padding(top = if (isTampered) 136.dp else 64.dp, start = 16.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(Color(0x941E293B))
                     .border(1.2.dp, Color(0x44FFFFFF), RoundedCornerShape(16.dp))
@@ -139,12 +205,19 @@ fun CameraScreen(
             ) {
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Shield, contentDescription = "Shield", tint = Color(0xFF10B981), modifier = Modifier.size(15.dp))
+                        Icon(
+                            imageVector = if (isTampered) Icons.Default.Warning else Icons.Default.Shield,
+                            contentDescription = "Shield",
+                            tint = if (isTampered) Color(0xFFEF4444) else Color(0xFF10B981),
+                            modifier = Modifier.size(15.dp)
+                        )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(settings.companyTag.uppercase(Locale.ROOT), color = Color(0xFF38BDF8), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
-                    Text(locationData.formattedTime.ifEmpty { "21:39" }, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
-                    Text(locationData.formattedDate.ifEmpty { "13 Okt 2026" }, color = Color(0xFFCBD5E1), fontSize = 12.sp)
+                    val safeTime = locationData.formattedTime.ifEmpty { SimpleDateFormat("HH:mm", Locale("id", "ID")).format(Date()) }
+                    val safeDate = locationData.formattedDate.ifEmpty { SimpleDateFormat("dd MMM yyyy", Locale("id", "ID")).format(Date()) }
+                    Text(safeTime, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
+                    Text(safeDate, color = Color(0xFFCBD5E1), fontSize = 12.sp)
                 }
             }
         }
@@ -400,6 +473,100 @@ fun CameraScreen(
                     Spacer(modifier = Modifier.height(28.dp))
                 }
             }
+        }
+
+        // Security Details & Anti-Fake Test Dialog
+        if (showSecurityDialog) {
+            AlertDialog(
+                onDismissRequest = { showSecurityDialog = false },
+                containerColor = Color(0xFF1E293B),
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (isTampered) Icons.Default.Warning else Icons.Default.Shield,
+                            contentDescription = "Security",
+                            tint = if (isTampered) Color(0xFFEF4444) else Color(0xFF10B981)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isTampered) "Peringatan Keamanan" else "Keamanan Lokasi & Waktu",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+                    }
+                },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = if (isTampered)
+                                "Terdeteksi potensi manipulasi pada perangkat ini:"
+                            else
+                                "Sistem memvalidasi keaslian GPS dan jam perangkat secara realtime:",
+                            color = Color(0xFFCBD5E1),
+                            fontSize = 13.sp
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Status GPS Mock
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Mock / Fake GPS:", color = Color(0xFF94A3B8), fontSize = 13.sp)
+                            Text(
+                                text = if (sec.isMockDetected) "TERDETEKSI (PALSU)" else "BERSIH (ASLI)",
+                                color = if (sec.isMockDetected) Color(0xFFEF4444) else Color(0xFF10B981),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+
+                        // Status Jam Perangkat
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Waktu Otomatis:", color = Color(0xFF94A3B8), fontSize = 13.sp)
+                            Text(
+                                text = if (sec.isTimeManipulated) "DIMANIPULASI / MANUAL" else "OTOMATIS (VALID)",
+                                color = if (sec.isTimeManipulated) Color(0xFFEF4444) else Color(0xFF10B981),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+
+                        // Token Kriptografis
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Token Kriptografis:", color = Color(0xFF94A3B8), fontSize = 13.sp)
+                            Text(
+                                text = "#${sec.signatureToken}",
+                                color = Color(0xFF38BDF8),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+
+                        if (sec.detectedAnomalies.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text("Detail Anomali:", color = Color(0xFFFCA5A5), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            sec.detectedAnomalies.forEach { anomaly ->
+                                Text("• $anomaly", color = Color(0xFFFECACA), fontSize = 11.sp)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showSecurityDialog = false }) {
+                        Text("Tutup", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold)
+                    }
+                }
+            )
         }
     }
 }

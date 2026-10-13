@@ -87,6 +87,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun resetSecurityDetection() {
+        AntiFakeLocationDetector.resetDetection()
+    }
+
     fun refreshLocation() {
         locationManager.startLocationUpdates()
     }
@@ -129,7 +133,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 viewModelScope.launch(Dispatchers.Default) {
                     try {
                         val currentLocation = locationData.value
-                        val secResult = AntiFakeLocationDetector.analyzeLocation(context, null)
+                        val secResult = currentLocation.securityResult
 
                         val config = WatermarkConfig(
                             tagLabel = settings.value.companyTag,
