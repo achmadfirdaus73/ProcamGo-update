@@ -1,0 +1,210 @@
+package com.example.location
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.io.File
+import java.io.FileOutputStream
+import java.util.concurrent.TimeUnit
+import kotlin.math.asinh
+import kotlin.math.floor
+import kotlin.math.tan
+
+object MapTileHelper {
+
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(6, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
+        .build()
+
+    private var memoryCachedThumbnail: Bitmap? = null
+    private var lastLat: Double = 0.0
+    private var lastLon: Double = 0.0
+
+    suspend fun renderLocationMapThumbnail(
+        context: Context,
+        lat: Double,
+        lon: Double,
+        zoom: Int = 16,
+        targetSize: Int = 256
+    ): Bitmap = withContext(Dispatchers.IO) {
+        if (memoryCachedThumbnail != null &&
+            kotlin.math.abs(lat - lastLat) < 0.0001 &&
+            kotlin.math.abs(lon - lastLon) < 0.0001
+        ) {
+            return@withContext memoryCachedThumbnail!!
+        }
+
+        val rawTile = fetchOpenStreetMapTile(context, lat, lon, zoom)
+        lastLat = lat
+        lastLon = lon
+        memoryCachedThumbnail = rawTile
+        rawTile
+    }
+
+    suspend fun fetchLocationMapTile(
+        context: Context,
+        lat: Double,
+        lon: Double,
+        zoom: Int = 16
+    ): Bitmap = renderLocationMapThumbnail(context, lat, lon, zoom)
+
+    fun getOrGenerateThumbnailSync(
+        context: Context,
+        lat: Double,
+        lon: Double,
+        zoom: Int = 16,
+        targetSize: Int = 256
+    ): Bitmap {
+        return getRawTileSync(context, lat, lon, zoom)
+    }
+
+    fun getRawTileSync(context: Context, lat: Double, lon: Double, zoom: Int = 16): Bitmap {
+        val diskTile = getCachedDiskTile(context, lat, lon, zoom)
+        return diskTile ?: createProceduralMap(lat, lon)
+    }
+
+    private fun fetchOpenStreetMapTile(
+        context: Context,
+        lat: Double,
+        lon: Double,
+        zoom: Int
+    ): Bitmap {
+        if (lat == 0.0 && lon == 0.0) {
+            return createProceduralMap(lat, lon)
+        }
+
+        val diskTile = getCachedDiskTile(context, lat, lon, zoom)
+        if (diskTile != null) {
+            return diskTile
+        }
+
+        val tileX = lonToTileX(lon, zoom)
+        val tileY = latToTileY(lat, zoom)
+
+        val cacheDir = File(context.cacheDir, "osm_tiles")
+        if (!cacheDir.exists()) cacheDir.mkdirs()
+        val cacheFile = File(cacheDir, "osm_${zoom}_${tileX}_${tileY}.png")
+
+        val osmUrls = listOf(
+            "https://tile.openstreetmap.org/$zoom/$tileX/$tileY.png",
+            "https://a.tile.openstreetmap.org/$zoom/$tileX/$tileY.png",
+            "https://b.tile.openstreetmap.org/$zoom/$tileX/$tileY.png"
+        )
+
+        for (url in osmUrls) {
+            try {
+                val request = Request.Builder()
+                    .url(url)
+                    .addHeader("User-Agent", "KolekProCam/1.0 (Android OSM Map Watermark)")
+                    .build()
+
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val bytes = response.body?.bytes()
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        val downloadedBmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        if (downloadedBmp != null) {
+                            try {
+                                FileOutputStream(cacheFile).use { out ->
+                                    out.write(bytes)
+                                    out.flush()
+                                }
+                            } catch (_: Exception) {}
+                            return downloadedBmp
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        return createProceduralMap(lat, lon)
+    }
+
+    private fun getCachedDiskTile(context: Context, lat: Double, lon: Double, zoom: Int): Bitmap? {
+        val tileX = lonToTileX(lon, zoom)
+        val tileY = latToTileY(lat, zoom)
+        val cacheDir = File(context.cacheDir, "osm_tiles")
+        val cacheFile = File(cacheDir, "osm_${zoom}_${tileX}_${tileY}.png")
+        if (cacheFile.exists() && cacheFile.length() > 0) {
+            return try {
+                BitmapFactory.decodeFile(cacheFile.absolutePath)
+            } catch (_: Exception) {
+                null
+            }
+        }
+        return null
+    }
+
+    private fun lonToTileX(lon: Double, zoom: Int): Int {
+        return floor((lon + 180.0) / 360.0 * (1 shl zoom)).toInt()
+    }
+
+    private fun latToTileY(lat: Double, zoom: Int): Int {
+        val latRad = Math.toRadians(lat)
+        return floor((1.0 - asinh(tan(latRad)) / Math.PI) / 2.0 * (1 shl zoom)).toInt()
+    }
+
+    private fun createProceduralMap(lat: Double, lon: Double): Bitmap {
+        val size = 256
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        // OpenStreetMap street aesthetic (warm light background)
+        val bgPaint = Paint().apply {
+            color = Color.parseColor("#F2EFE9") // OSM land color
+            style = Paint.Style.FILL
+        }
+        canvas.drawRect(0f, 0f, size.toFloat(), size.toFloat(), bgPaint)
+
+        // Green park / residential blocks
+        val parkPaint = Paint().apply {
+            color = Color.parseColor("#D4ECC4")
+            style = Paint.Style.FILL
+        }
+        canvas.drawRect(20f, 30f, 95f, 110f, parkPaint)
+        canvas.drawRect(140f, 150f, 230f, 220f, parkPaint)
+
+        // Buildings (soft light gray)
+        val bldgPaint = Paint().apply {
+            color = Color.parseColor("#D9D0C9")
+            style = Paint.Style.FILL
+        }
+        canvas.drawRect(110f, 40f, 160f, 85f, bldgPaint)
+        canvas.drawRect(175f, 45f, 225f, 95f, bldgPaint)
+        canvas.drawRect(30f, 140f, 85f, 195f, bldgPaint)
+
+        // Major roads & streets (yellow/orange highway and white streets)
+        val highwayCasing = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#E5BA65")
+            style = Paint.Style.STROKE
+            strokeWidth = 16f
+        }
+        val highwayPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#FBD37C")
+            style = Paint.Style.STROKE
+            strokeWidth = 14f
+        }
+        canvas.drawLine(0f, 128f, size.toFloat(), 128f, highwayCasing)
+        canvas.drawLine(0f, 128f, size.toFloat(), 128f, highwayPaint)
+
+        val streetPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#FFFFFF")
+            style = Paint.Style.STROKE
+            strokeWidth = 8f
+        }
+        canvas.drawLine(128f, 0f, 128f, size.toFloat(), streetPaint)
+        canvas.drawLine(0f, 60f, 128f, 60f, streetPaint)
+        canvas.drawLine(128f, 190f, size.toFloat(), 190f, streetPaint)
+
+        return bitmap
+    }
+}
