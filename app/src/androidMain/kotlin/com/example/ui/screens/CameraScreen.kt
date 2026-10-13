@@ -131,20 +131,20 @@ fun CameraScreen(
                 modifier = Modifier
                     .statusBarsPadding()
                     .padding(top = 64.dp, start = 16.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0x8C1E293B))
-                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(14.dp))
-                    .padding(10.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0x941E293B))
+                    .border(1.2.dp, Color(0x44FFFFFF), RoundedCornerShape(16.dp))
+                    .padding(14.dp)
                     .align(Alignment.TopStart)
             ) {
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Shield, contentDescription = "Shield", tint = Color(0xFF10B981), modifier = Modifier.size(13.dp))
+                        Icon(Icons.Default.Shield, contentDescription = "Shield", tint = Color(0xFF10B981), modifier = Modifier.size(15.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(settings.companyTag.uppercase(Locale.ROOT), color = Color(0xFF38BDF8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(settings.companyTag.uppercase(Locale.ROOT), color = Color(0xFF38BDF8), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
-                    Text(locationData.formattedTime.ifEmpty { "21:39" }, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
-                    Text(locationData.formattedDate.ifEmpty { "13 Okt 2026" }, color = Color(0xFFCBD5E1), fontSize = 10.sp)
+                    Text(locationData.formattedTime.ifEmpty { "21:39" }, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
+                    Text(locationData.formattedDate.ifEmpty { "13 Okt 2026" }, color = Color(0xFFCBD5E1), fontSize = 12.sp)
                 }
             }
         }
