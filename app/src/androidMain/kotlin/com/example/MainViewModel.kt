@@ -133,7 +133,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 viewModelScope.launch(Dispatchers.Default) {
                     try {
                         val currentLocation = locationData.value
-                        val secResult = currentLocation.securityResult
+                        val freshTime = LocationManager.formatCurrentTime()
+                        val freshDate = LocationManager.formatCurrentDate()
+                        val actualLocation = currentLocation.copy(
+                            formattedTime = if (currentLocation.formattedTime.isNotEmpty()) currentLocation.formattedTime else freshTime,
+                            formattedDate = if (currentLocation.formattedDate.isNotEmpty()) currentLocation.formattedDate else freshDate
+                        )
+                        val secResult = actualLocation.securityResult
 
                         val config = WatermarkConfig(
                             tagLabel = settings.value.companyTag,
@@ -145,7 +151,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         val result = WatermarkRenderer.applyWatermarkAndCompress(
                             context = context,
                             sourceBitmap = rawBitmap,
-                            locationData = currentLocation,
+                            locationData = actualLocation,
                             securityResult = secResult,
                             config = config,
                             customMapThumbnail = _currentMapThumbnail.value
@@ -190,10 +196,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 tagLabel = tag
             )
 
+            val photoTime = currentLocation.formattedTime.ifEmpty { LocationManager.formatCurrentTime() }
+            val photoDate = currentLocation.formattedDate.ifEmpty { LocationManager.formatCurrentDate() }
+
             val photoRecord = PhotoRecord(
                 filePath = savedFile.absolutePath,
-                formattedDate = currentLocation.formattedDate,
-                formattedTime = currentLocation.formattedTime,
+                formattedDate = photoDate,
+                formattedTime = photoTime,
                 tagLabel = tag,
                 address = currentLocation.realAddress.ifEmpty { currentLocation.address },
                 latitude = currentLocation.realLatitude,

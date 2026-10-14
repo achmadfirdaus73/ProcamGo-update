@@ -12,8 +12,13 @@ import kotlin.math.abs
 
 object AntiFakeLocationDetector {
 
-    private var baselineBootEpoch: Long? = null
     private var lastRecordedSystemTime: Long = 0L
+    private var lastRecordedElapsedRealtime: Long = 0L
+
+    // Cache package scan results so we never thrash Binder/PackageManager in 1-second loops
+    private var lastPackageCheckTime: Long = 0L
+    private var cachedMockPackageDetected: Boolean = false
+    private var cachedPackageAnomaly: String? = null
 
     private val knownFakeGpsPackages = setOf(
         "com.lexa.fakegps",
@@ -31,8 +36,11 @@ object AntiFakeLocationDetector {
     )
 
     fun resetDetection() {
-        baselineBootEpoch = null
         lastRecordedSystemTime = 0L
+        lastRecordedElapsedRealtime = 0L
+        lastPackageCheckTime = 0L
+        cachedMockPackageDetected = false
+        cachedPackageAnomaly = null
     }
 
     fun analyzeLocation(context: Context, location: Location?): SecurityCheckResult {
@@ -46,39 +54,39 @@ object AntiFakeLocationDetector {
         // -------------------------------------------------------------
         // 1. CEK WAKTU: Validasi Integritas Jam Sistem
         // -------------------------------------------------------------
-        // Periksa apakah "Otomatis Tanggal & Waktu" aktif di Android Settings.
-        // Jika aktif, waktu disinkronkan langsung dari jaringan operator seluler / NTP server resmi,
-        // sehingga dijamin ASLI dan tidak dapat dipalsukan secara manual.
+        // Periksa apakah "Otomatis Tanggal & Waktu" (NTP/Network Time) aktif.
         val isAutoTimeEnabled = try {
             Settings.Global.getInt(context.contentResolver, Settings.Global.AUTO_TIME, 1) != 0
         } catch (_: Exception) {
             true
         }
 
-        if (!isAutoTimeEnabled) {
-            // Jika pengguna mematikan auto-time, periksa apakah jam sengaja digeser / dimanipulasi
-            // saat aplikasi aktif berjalan (pergeseran drastis > 10 menit)
-            val currentBootEpoch = systemTime - elapsedRealtime
-            if (baselineBootEpoch == null) {
-                baselineBootEpoch = currentBootEpoch
-            } else {
-                val drift = abs(currentBootEpoch - baselineBootEpoch!!)
-                if (drift > 10 * 60 * 1000L) { // > 10 menit
-                    isTimeFake = true
-                    anomalies.add("Jam perangkat digeser manual secara drastis (${drift / 60000} menit)")
+        if (isAutoTimeEnabled) {
+            // Jika waktu otomatis aktif, waktu dikelola langsung oleh sistem seluler / Google NTP server.
+            // Dijamin ASLI & AUTHENTIC tanpa false positive meskipun aplikasi berjalan seharian.
+            isTimeFake = false
+            lastRecordedSystemTime = systemTime
+            lastRecordedElapsedRealtime = elapsedRealtime
+        } else {
+            // Ketika auto-time mati, deteksi hanya jika ada perubahan jam manual yang disengaja
+            // saat aplikasi aktif digunakan (pergeseran drastis > 15 menit dalam selang waktu singkat)
+            if (lastRecordedSystemTime > 0L && lastRecordedElapsedRealtime > 0L) {
+                val realElapsedDelta = elapsedRealtime - lastRecordedElapsedRealtime
+                val systemTimeDelta = systemTime - lastRecordedSystemTime
+
+                // Hanya validasi jika jeda waktu antar-tick masih dalam status aktif (< 5 menit).
+                // Jika perangkat tidur / sleep berjam-jam saat "jalan seharian", jeda diabaikan dengan mulus.
+                if (realElapsedDelta in 0..300_000L) {
+                    val stepDiscrepancy = abs(systemTimeDelta - realElapsedDelta)
+                    if (stepDiscrepancy > 15 * 60 * 1000L) {
+                        isTimeFake = true
+                        anomalies.add("Jam perangkat diubah manual saat aplikasi aktif (${stepDiscrepancy / 60000} menit)")
+                    }
                 }
             }
-
-            // Periksa jika jam sengaja dimundurkan > 10 menit
-            if (lastRecordedSystemTime > 0L && systemTime < (lastRecordedSystemTime - 10 * 60 * 1000L)) {
-                isTimeFake = true
-                anomalies.add("Jam sistem dimundurkan secara manual")
-            }
-        } else {
-            // Ketika auto-time aktif, update baseline secara mulus tanpa memicu false positive
-            baselineBootEpoch = systemTime - elapsedRealtime
+            lastRecordedSystemTime = systemTime
+            lastRecordedElapsedRealtime = elapsedRealtime
         }
-        lastRecordedSystemTime = systemTime
 
         // -------------------------------------------------------------
         // 2. CEK FAKE GPS: API Resmi Android isMock / isFromMockProvider
@@ -105,26 +113,13 @@ object AntiFakeLocationDetector {
         }
 
         // -------------------------------------------------------------
-        // 3. CEK FAKE GPS: Deteksi Aplikasi Mock / Fake GPS Terkenal
+        // 3. CEK FAKE GPS: Deteksi Aplikasi Mock / Fake GPS Terkenal (Cached)
         // -------------------------------------------------------------
-        try {
-            val pm = context.packageManager
-            val packages = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                pm.getInstalledPackages(PackageManager.PackageInfoFlags.of(PackageManager.GET_PERMISSIONS.toLong()))
-            } else {
-                @Suppress("DEPRECATION")
-                pm.getInstalledPackages(PackageManager.GET_PERMISSIONS)
-            }
-
-            for (pkg in packages) {
-                if (pkg.packageName == context.packageName) continue
-                if (knownFakeGpsPackages.contains(pkg.packageName)) {
-                    isMock = true
-                    anomalies.add("Aplikasi Fake GPS terpasang (${pkg.packageName})")
-                    break
-                }
-            }
-        } catch (_: Exception) {}
+        val (packageMockDetected, packageAnomaly) = checkFakeGpsPackages(context)
+        if (packageMockDetected) {
+            isMock = true
+            packageAnomaly?.let { anomalies.add(it) }
+        }
 
         // -------------------------------------------------------------
         // 4. Tanda Tangan Kriptografis Integritas Data
@@ -144,6 +139,36 @@ object AntiFakeLocationDetector {
             signatureToken = token,
             detectedAnomalies = anomalies
         )
+    }
+
+    private fun checkFakeGpsPackages(context: Context): Pair<Boolean, String?> {
+        val now = SystemClock.elapsedRealtime()
+        // Cache paket selama 60 detik untuk mencegah Binder exhaustion / GC pause
+        if (now - lastPackageCheckTime < 60_000L && lastPackageCheckTime > 0L) {
+            return Pair(cachedMockPackageDetected, cachedPackageAnomaly)
+        }
+        lastPackageCheckTime = now
+        try {
+            val pm = context.packageManager
+            val packages = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.getInstalledPackages(PackageManager.PackageInfoFlags.of(PackageManager.GET_PERMISSIONS.toLong()))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getInstalledPackages(PackageManager.GET_PERMISSIONS)
+            }
+
+            for (pkg in packages) {
+                if (pkg.packageName == context.packageName) continue
+                if (knownFakeGpsPackages.contains(pkg.packageName)) {
+                    cachedMockPackageDetected = true
+                    cachedPackageAnomaly = "Aplikasi Fake GPS terpasang (${pkg.packageName})"
+                    return Pair(true, cachedPackageAnomaly)
+                }
+            }
+            cachedMockPackageDetected = false
+            cachedPackageAnomaly = null
+        } catch (_: Exception) {}
+        return Pair(cachedMockPackageDetected, cachedPackageAnomaly)
     }
 
     private fun sha256(input: String): String {

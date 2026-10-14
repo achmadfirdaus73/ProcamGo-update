@@ -214,7 +214,7 @@ fun CameraScreen(
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(settings.companyTag.uppercase(Locale.ROOT), color = Color(0xFF38BDF8), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
-                    val safeTime = locationData.formattedTime.ifEmpty { SimpleDateFormat("HH:mm", Locale("id", "ID")).format(Date()) }
+                    val safeTime = locationData.formattedTime.ifEmpty { SimpleDateFormat("HH:mm:ss", Locale("id", "ID")).format(Date()) }
                     val safeDate = locationData.formattedDate.ifEmpty { SimpleDateFormat("dd MMM yyyy", Locale("id", "ID")).format(Date()) }
                     Text(safeTime, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
                     Text(safeDate, color = Color(0xFFCBD5E1), fontSize = 12.sp)

@@ -16,10 +16,12 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -34,17 +36,32 @@ class LocationManager(private val context: Context, private val scope: Coroutine
     private val sysLocationManager: android.location.LocationManager? =
         context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
 
-    // Format waktu lengkap dengan detik (HH:mm:ss) agar aktif berdetak real-time!
-    private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale("id", "ID"))
-    private val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale("id", "ID"))
-
     private var lastRawLocation: Location? = null
     private var lastRealLat: Double = -6.175392
     private var lastRealLon: Double = 106.827153
     private var lastRealAddr: String = "Jl. Raya No. 1, Jakarta, Indonesia"
 
+    private var tickerJob: Job? = null
+
+    companion object {
+        fun formatCurrentTime(): String {
+            return try {
+                SimpleDateFormat("HH:mm:ss", Locale("id", "ID")).format(Date())
+            } catch (_: Exception) {
+                ""
+            }
+        }
+
+        fun formatCurrentDate(): String {
+            return try {
+                SimpleDateFormat("dd MMM yyyy", Locale("id", "ID")).format(Date())
+            } catch (_: Exception) {
+                ""
+            }
+        }
+    }
+
     // Initialize with REAL CURRENT SYSTEM TIME & DATE immediately!
-    private val initialNow = Date()
     private val initialSecurity = AntiFakeLocationDetector.analyzeLocation(context, null)
 
     private val _locationData = MutableStateFlow(
@@ -55,8 +72,8 @@ class LocationManager(private val context: Context, private val scope: Coroutine
             realLongitude = lastRealLon,
             address = lastRealAddr,
             realAddress = lastRealAddr,
-            formattedTime = timeFormat.format(initialNow),
-            formattedDate = dateFormat.format(initialNow),
+            formattedTime = formatCurrentTime(),
+            formattedDate = formatCurrentDate(),
             securityResult = initialSecurity
         )
     )
@@ -79,20 +96,34 @@ class LocationManager(private val context: Context, private val scope: Coroutine
     }
 
     init {
-        // Continuous 1-second real-time clock ticker & dynamic anti-fake security check
-        scope.launch {
-            while (true) {
-                val now = Date()
-                val curTime = timeFormat.format(now)
-                val curDate = dateFormat.format(now)
-                val sec = AntiFakeLocationDetector.analyzeLocation(context, lastRawLocation)
+        ensureTickerRunning()
+    }
 
-                val current = _locationData.value
-                _locationData.value = current.copy(
-                    formattedTime = curTime,
-                    formattedDate = curDate,
-                    securityResult = sec
-                )
+    /**
+     * Memastikan coroutine ticker waktu selalu aktif berdetak setiap 1 detik.
+     * Menggunakan try-catch internal agar loop tidak pernah mati akibat error sistem/memori.
+     */
+    fun ensureTickerRunning() {
+        if (tickerJob?.isActive == true) return
+
+        tickerJob = scope.launch(Dispatchers.Default) {
+            while (isActive) {
+                try {
+                    val curTime = formatCurrentTime()
+                    val curDate = formatCurrentDate()
+                    val sec = AntiFakeLocationDetector.analyzeLocation(context, lastRawLocation)
+
+                    withContext(Dispatchers.Main) {
+                        val current = _locationData.value
+                        _locationData.value = current.copy(
+                            formattedTime = if (curTime.isNotEmpty()) curTime else current.formattedTime,
+                            formattedDate = if (curDate.isNotEmpty()) curDate else current.formattedDate,
+                            securityResult = sec
+                        )
+                    }
+                } catch (_: Exception) {
+                    // Mencegah loop terminasi saat perangkat sleep atau memori rendah
+                }
                 delay(1000)
             }
         }
@@ -100,6 +131,17 @@ class LocationManager(private val context: Context, private val scope: Coroutine
 
     @SuppressLint("MissingPermission")
     fun startLocationUpdates() {
+        ensureTickerRunning()
+
+        // Perbarui waktu seketika tanpa menunggu siklus delay 1 detik
+        val nowTime = formatCurrentTime()
+        val nowDate = formatCurrentDate()
+        val cur = _locationData.value
+        _locationData.value = cur.copy(
+            formattedTime = if (nowTime.isNotEmpty()) nowTime else cur.formattedTime,
+            formattedDate = if (nowDate.isNotEmpty()) nowDate else cur.formattedDate
+        )
+
         // 1. Google Play Services Fused Location
         try {
             val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 2000)
@@ -151,9 +193,8 @@ class LocationManager(private val context: Context, private val scope: Coroutine
 
     private fun updateLocation(loc: Location) {
         lastRawLocation = loc
-        val now = Date()
-        val formattedTime = timeFormat.format(now)
-        val formattedDate = dateFormat.format(now)
+        val curTime = formatCurrentTime()
+        val curDate = formatCurrentDate()
         val security = AntiFakeLocationDetector.analyzeLocation(context, loc)
 
         scope.launch {
@@ -165,19 +206,22 @@ class LocationManager(private val context: Context, private val scope: Coroutine
                 lastRealAddr = addressText
             }
 
-            _locationData.value = LiveLocationData(
-                latitude = loc.latitude,
-                longitude = loc.longitude,
-                realLatitude = if (security.isMockDetected) lastRealLat else loc.latitude,
-                realLongitude = if (security.isMockDetected) lastRealLon else loc.longitude,
-                altitude = loc.altitude,
-                accuracy = loc.accuracy,
-                address = addressText,
-                realAddress = if (security.isMockDetected) lastRealAddr else addressText,
-                formattedTime = formattedTime,
-                formattedDate = formattedDate,
-                securityResult = security
-            )
+            withContext(Dispatchers.Main) {
+                val current = _locationData.value
+                _locationData.value = LiveLocationData(
+                    latitude = loc.latitude,
+                    longitude = loc.longitude,
+                    realLatitude = if (security.isMockDetected) lastRealLat else loc.latitude,
+                    realLongitude = if (security.isMockDetected) lastRealLon else loc.longitude,
+                    altitude = loc.altitude,
+                    accuracy = loc.accuracy,
+                    address = addressText,
+                    realAddress = if (security.isMockDetected) lastRealAddr else addressText,
+                    formattedTime = if (curTime.isNotEmpty()) curTime else current.formattedTime,
+                    formattedDate = if (curDate.isNotEmpty()) curDate else current.formattedDate,
+                    securityResult = security
+                )
+            }
         }
     }
 

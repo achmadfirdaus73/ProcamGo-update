@@ -20,8 +20,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.camera.core.AspectRatio
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import java.nio.ByteBuffer
@@ -87,6 +88,7 @@ fun CameraPreviewView(
 
     val imageCapture = remember {
         ImageCapture.Builder()
+            .setTargetAspectRatio(AspectRatio.RATIO_4_3)
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
             .setFlashMode(flashMode)
             .build()

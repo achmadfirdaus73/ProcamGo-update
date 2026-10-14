@@ -55,7 +55,8 @@ enum class WatermarkStyle(val id: Int, val title: String, val desc: String) {
 data class WatermarkConfig(
     val tagLabel: String = "FIRDAUS",
     val qualityPercentage: Int = 95,
-    val maxDimension: Int = 3840,
+    val targetWidth: Int = 1920,
+    val targetHeight: Int = 2560,
     val showDynamicMap: Boolean = true,
     val showSecurityToken: Boolean = true,
     val qualityStyle: PhotoQualityStyle = PhotoQualityStyle.SMART_HDR_ULTRA,
@@ -81,7 +82,7 @@ object WatermarkRenderer {
         config: WatermarkConfig,
         customMapThumbnail: Bitmap? = null
     ): WatermarkResult {
-        val scaledSource = scaleBitmap(sourceBitmap, config.maxDimension)
+        val scaledSource = scaleToTargetResolution(sourceBitmap, config.targetWidth, config.targetHeight)
         val enhanced = PhotoQualityEngine.processBitmap(scaledSource, config.qualityStyle)
         val originalRawSize = (enhanced.width * enhanced.height * 4).toLong()
 
@@ -259,7 +260,9 @@ object WatermarkRenderer {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             setShadowLayer(shadowRadius * 1.5f, 0f, shadowDy * 1.5f, shadowColor)
         }
-        val timeText = locationData.formattedTime.ifEmpty { "18:16" }
+        val timeText = locationData.formattedTime.ifEmpty {
+            java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale("id", "ID")).format(java.util.Date())
+        }
         canvas.drawText(timeText, contentLeft, contentTop + 84f * scale, clockPaint)
 
         // 3. Date
@@ -269,7 +272,9 @@ object WatermarkRenderer {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
             setShadowLayer(shadowRadius, 0f, shadowDy, shadowColor)
         }
-        val dateText = locationData.formattedDate.ifEmpty { "10 Okt 2026" }
+        val dateText = locationData.formattedDate.ifEmpty {
+            java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date())
+        }
         canvas.drawText(dateText, contentLeft, contentTop + 124f * scale, datePaint)
 
         // 4. Status Pill
@@ -354,16 +359,32 @@ object WatermarkRenderer {
         canvas.drawText(label, x + (8f * scale), y + (15.5f * scale), textPaint)
     }
 
-    private fun scaleBitmap(bitmap: Bitmap, maxDim: Int): Bitmap {
-        if (maxDim <= 0) return bitmap
-        val width = bitmap.width
-        val height = bitmap.height
-        if (width <= maxDim && height <= maxDim) return bitmap
+    private fun scaleToTargetResolution(bitmap: Bitmap, targetShort: Int = 1920, targetLong: Int = 2560): Bitmap {
+        val isPortrait = bitmap.height >= bitmap.width
+        val targetW = if (isPortrait) targetShort else targetLong
+        val targetH = if (isPortrait) targetLong else targetShort
 
-        val ratio = min(maxDim.toFloat() / width, maxDim.toFloat() / height)
-        val targetWidth = (width * ratio).toInt()
-        val targetHeight = (height * ratio).toInt()
+        val targetAspect = targetW.toFloat() / targetH.toFloat()
+        val currentAspect = bitmap.width.toFloat() / bitmap.height.toFloat()
 
-        return Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
+        // Jika rasio aspek kamera sedikit berbeda (misal 0.738 vs 0.75), lakukan center-crop simetris agar objek tidak gepeng/terdistorsi
+        val croppedBitmap = if (kotlin.math.abs(currentAspect - targetAspect) > 0.005f) {
+            if (currentAspect > targetAspect) {
+                // Gambar lebih lebar daripada 3:4 -> potong sisi kiri dan kanan secara simetris
+                val newWidth = (bitmap.height * targetAspect).toInt().coerceIn(1, bitmap.width)
+                val xOffset = ((bitmap.width - newWidth) / 2).coerceAtLeast(0)
+                Bitmap.createBitmap(bitmap, xOffset, 0, newWidth, bitmap.height)
+            } else {
+                // Gambar lebih tinggi daripada 3:4 -> potong atas dan bawah secara simetris
+                val newHeight = (bitmap.width / targetAspect).toInt().coerceIn(1, bitmap.height)
+                val yOffset = ((bitmap.height - newHeight) / 2).coerceAtLeast(0)
+                Bitmap.createBitmap(bitmap, 0, yOffset, bitmap.width, newHeight)
+            }
+        } else {
+            bitmap
+        }
+
+        // Skala persis ke target 1920 x 2560 pixel
+        return Bitmap.createScaledBitmap(croppedBitmap, targetW, targetH, true)
     }
 }
