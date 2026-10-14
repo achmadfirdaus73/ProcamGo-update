@@ -527,9 +527,9 @@ fun CameraScreen(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("Waktu Otomatis:", color = Color(0xFF94A3B8), fontSize = 13.sp)
+                            Text("Integritas Jam:", color = Color(0xFF94A3B8), fontSize = 13.sp)
                             Text(
-                                text = if (sec.isTimeManipulated) "DIMANIPULASI / MANUAL" else "OTOMATIS (VALID)",
+                                text = if (sec.isTimeManipulated) "DIMANIPULASI (PALSU)" else "VALID (ASLI)",
                                 color = if (sec.isTimeManipulated) Color(0xFFEF4444) else Color(0xFF10B981),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp
@@ -556,6 +556,29 @@ fun CameraScreen(
                             sec.detectedAnomalies.forEach { anomaly ->
                                 Text("• $anomaly", color = Color(0xFFFECACA), fontSize = 11.sp)
                             }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0x2238BDF8))
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "Otomatis",
+                                tint = Color(0xFF38BDF8),
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Pemindaian aktif otomatis setiap detik secara real-time.",
+                                color = Color(0xFF94A3B8),
+                                fontSize = 11.sp
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
