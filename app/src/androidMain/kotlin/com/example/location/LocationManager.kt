@@ -36,7 +36,8 @@ class LocationManager(private val context: Context, private val scope: Coroutine
     private val sysLocationManager: android.location.LocationManager? =
         context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
 
-    private var lastRawLocation: Location? = null
+    var lastRawLocation: Location? = null
+        private set
     private var lastRealLat: Double = -6.175392
     private var lastRealLon: Double = 106.827153
     private var lastRealAddr: String = "Jl. Raya No. 1, Jakarta, Indonesia"
@@ -133,13 +134,15 @@ class LocationManager(private val context: Context, private val scope: Coroutine
     fun startLocationUpdates() {
         ensureTickerRunning()
 
-        // Perbarui waktu seketika tanpa menunggu siklus delay 1 detik
+        // Perbarui waktu & status keamanan seketika tanpa menunggu siklus delay 1 detik
         val nowTime = formatCurrentTime()
         val nowDate = formatCurrentDate()
+        val sec = AntiFakeLocationDetector.analyzeLocation(context, lastRawLocation)
         val cur = _locationData.value
         _locationData.value = cur.copy(
             formattedTime = if (nowTime.isNotEmpty()) nowTime else cur.formattedTime,
-            formattedDate = if (nowDate.isNotEmpty()) nowDate else cur.formattedDate
+            formattedDate = if (nowDate.isNotEmpty()) nowDate else cur.formattedDate,
+            securityResult = sec
         )
 
         // 1. Google Play Services Fused Location

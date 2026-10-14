@@ -71,7 +71,7 @@ fun SecurityBadge(
     val label = when {
         sec.isMockDetected && sec.isTimeManipulated -> "⚠️ FAKE GPS & WAKTU"
         sec.isMockDetected -> "⚠️ FAKE GPS"
-        sec.isTimeManipulated -> "⚠️ WAKTU PALSU"
+        sec.isTimeManipulated -> "⚠️ WAKTU MANUAL (PALSU)"
         else -> if (isFilled) "🛡️ ASLI TERVERIFIKASI" else "🛡️ ASLI"
     }
     val borderColor = if (isTampered) Color(0xFFEF4444) else Color(0xFF10B981)

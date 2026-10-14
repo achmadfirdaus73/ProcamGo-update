@@ -881,7 +881,7 @@ object WatermarkStyles {
         val text = when {
             sec.isMockDetected && sec.isTimeManipulated -> "⚠️ FAKE GPS & WAKTU"
             sec.isMockDetected -> "⚠️ FAKE GPS"
-            sec.isTimeManipulated -> "⚠️ WAKTU PALSU"
+            sec.isTimeManipulated -> "⚠️ WAKTU MANUAL (PALSU)"
             else -> "🛡️ $defaultText"
         }
         val strokeColor = if (isTampered) Color.parseColor("#EF4444") else Color.parseColor("#10B981")
@@ -918,7 +918,7 @@ object WatermarkStyles {
         val text = when {
             sec.isMockDetected && sec.isTimeManipulated -> "⚠️ FAKE GPS & WAKTU"
             sec.isMockDetected -> "⚠️ FAKE GPS"
-            sec.isTimeManipulated -> "⚠️ WAKTU PALSU"
+            sec.isTimeManipulated -> "⚠️ WAKTU MANUAL (PALSU)"
             else -> "🛡️ $defaultText"
         }
         val bgColor = if (isTampered) Color.argb(220, 127, 29, 29) else Color.argb(210, 6, 78, 59)

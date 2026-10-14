@@ -51,6 +51,7 @@ fun CameraScreen(
     val flashMode by viewModel.flashMode.collectAsState()
     val currentMapThumbnail by viewModel.currentMapThumbnail.collectAsState()
     val photoQualityStyle by viewModel.photoQualityStyle.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     var noteText by remember { mutableStateOf("") }
     var showTagDialog by remember { mutableStateOf(false) }
@@ -116,8 +117,14 @@ fun CameraScreen(
                         modifier = Modifier.size(13.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
+                    val statusText = when {
+                        sec.isMockDetected && sec.isTimeManipulated -> "⚠️ FAKE GPS & WAKTU"
+                        sec.isTimeManipulated -> "⚠️ WAKTU MANUAL (PALSU)"
+                        sec.isMockDetected -> "⚠️ GPS PALSU"
+                        else -> "🛡️ ASLI"
+                    }
                     Text(
-                        text = if (isTampered) "⚠️ PALSU" else "🛡️ ASLI",
+                        text = statusText,
                         color = if (isTampered) Color(0xFFFCA5A5) else Color(0xFF6EE7B7),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
@@ -179,9 +186,10 @@ fun CameraScreen(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         val title = when {
-                            sec.isMockDetected && sec.isTimeManipulated -> "PERINGATAN: FAKE GPS & WAKTU PALSU!"
+                            sec.isMockDetected && sec.isTimeManipulated -> "PERINGATAN: FAKE GPS & WAKTU MANUAL!"
                             sec.isMockDetected -> "PERINGATAN: FAKE GPS / MOCK LOCATION!"
-                            else -> "PERINGATAN: WAKTU PERANGKAT DIMANIPULASI!"
+                            sec.isTimeManipulated -> "PERINGATAN: WAKTU MANUAL TERDETEKSI (PALSU)!"
+                            else -> "PERINGATAN: LOKASI ATAU WAKTU TIDAK VALID!"
                         }
                         Text(title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black)
                         val anomalyText = sec.detectedAnomalies.firstOrNull() ?: "Lokasi atau jam perangkat tidak valid"
@@ -529,7 +537,7 @@ fun CameraScreen(
                         ) {
                             Text("Integritas Jam:", color = Color(0xFF94A3B8), fontSize = 13.sp)
                             Text(
-                                text = if (sec.isTimeManipulated) "DIMANIPULASI (PALSU)" else "VALID (ASLI)",
+                                text = if (sec.isTimeManipulated) "MANUAL (PALSU)" else "OTOMATIS (ASLI)",
                                 color = if (sec.isTimeManipulated) Color(0xFFEF4444) else Color(0xFF10B981),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp
@@ -585,8 +593,26 @@ fun CameraScreen(
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { showSecurityDialog = false }) {
-                        Text("Tutup", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (sec.isTimeManipulated) {
+                            Button(
+                                onClick = {
+                                    try {
+                                        context.startActivity(android.content.Intent(android.provider.Settings.ACTION_DATE_SETTINGS).apply {
+                                            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                        })
+                                    } catch (_: Exception) {}
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Atur Jam Otomatis", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        TextButton(onClick = { showSecurityDialog = false }) {
+                            Text("Tutup", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             )

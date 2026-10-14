@@ -8,12 +8,8 @@ import android.os.SystemClock
 import android.provider.Settings
 import java.security.MessageDigest
 import java.util.Locale
-import kotlin.math.abs
 
 object AntiFakeLocationDetector {
-
-    private var lastRecordedSystemTime: Long = 0L
-    private var lastRecordedElapsedRealtime: Long = 0L
 
     // Cache package scan results so we never thrash Binder/PackageManager in 1-second loops
     private var lastPackageCheckTime: Long = 0L
@@ -36,11 +32,33 @@ object AntiFakeLocationDetector {
     )
 
     fun resetDetection() {
-        lastRecordedSystemTime = 0L
-        lastRecordedElapsedRealtime = 0L
         lastPackageCheckTime = 0L
         cachedMockPackageDetected = false
         cachedPackageAnomaly = null
+    }
+
+    /**
+     * Memeriksa apakah fitur 'Otomatis Tanggal & Waktu' (Network Time Provider / NTP) aktif di pengaturan Android.
+     * Mengembalikan true jika otomatis jaringan aktif (ASLI), atau false jika diatur ke manual (PALSU).
+     */
+    fun isAutomaticTimeEnabled(context: Context): Boolean {
+        return try {
+            val autoTime = Settings.Global.getInt(context.contentResolver, Settings.Global.AUTO_TIME, -1)
+            if (autoTime != -1) {
+                autoTime == 1
+            } else {
+                @Suppress("DEPRECATION")
+                val systemAutoTime = Settings.System.getInt(context.contentResolver, Settings.System.AUTO_TIME, -1)
+                if (systemAutoTime != -1) systemAutoTime == 1 else true
+            }
+        } catch (_: Exception) {
+            try {
+                @Suppress("DEPRECATION")
+                Settings.System.getInt(context.contentResolver, Settings.System.AUTO_TIME, 1) == 1
+            } catch (_: Exception) {
+                true
+            }
+        }
     }
 
     fun analyzeLocation(context: Context, location: Location?): SecurityCheckResult {
@@ -52,40 +70,19 @@ object AntiFakeLocationDetector {
         val elapsedRealtime = SystemClock.elapsedRealtime()
 
         // -------------------------------------------------------------
-        // 1. CEK WAKTU: Validasi Integritas Jam Sistem
+        // 1. CEK WAKTU: Validasi Otomatis Jaringan vs Manual
         // -------------------------------------------------------------
-        // Periksa apakah "Otomatis Tanggal & Waktu" (NTP/Network Time) aktif.
-        val isAutoTimeEnabled = try {
-            Settings.Global.getInt(context.contentResolver, Settings.Global.AUTO_TIME, 1) != 0
-        } catch (_: Exception) {
-            true
-        }
+        // Aturan: Jika waktu diubah ke manual (bukan otomatis jaringan),
+        // sistem langsung menampilkan FAKE / PALSU seketika.
+        // Jika diatur kembali ke otomatis (mengikuti waktu asli jaringan),
+        // sistem otomatis pulih menjadi ASLI & VALID.
+        val isAutoTimeEnabled = isAutomaticTimeEnabled(context)
 
-        if (isAutoTimeEnabled) {
-            // Jika waktu otomatis aktif, waktu dikelola langsung oleh sistem seluler / Google NTP server.
-            // Dijamin ASLI & AUTHENTIC tanpa false positive meskipun aplikasi berjalan seharian.
-            isTimeFake = false
-            lastRecordedSystemTime = systemTime
-            lastRecordedElapsedRealtime = elapsedRealtime
+        if (!isAutoTimeEnabled) {
+            isTimeFake = true
+            anomalies.add("Waktu manual aktif: Waktu perangkat disetel manual, bukan waktu otomatis jaringan (Wajib aktifkan 'Waktu Otomatis' di Pengaturan Android)")
         } else {
-            // Ketika auto-time mati, deteksi hanya jika ada perubahan jam manual yang disengaja
-            // saat aplikasi aktif digunakan (pergeseran drastis > 15 menit dalam selang waktu singkat)
-            if (lastRecordedSystemTime > 0L && lastRecordedElapsedRealtime > 0L) {
-                val realElapsedDelta = elapsedRealtime - lastRecordedElapsedRealtime
-                val systemTimeDelta = systemTime - lastRecordedSystemTime
-
-                // Hanya validasi jika jeda waktu antar-tick masih dalam status aktif (< 5 menit).
-                // Jika perangkat tidur / sleep berjam-jam saat "jalan seharian", jeda diabaikan dengan mulus.
-                if (realElapsedDelta in 0..300_000L) {
-                    val stepDiscrepancy = abs(systemTimeDelta - realElapsedDelta)
-                    if (stepDiscrepancy > 15 * 60 * 1000L) {
-                        isTimeFake = true
-                        anomalies.add("Jam perangkat diubah manual saat aplikasi aktif (${stepDiscrepancy / 60000} menit)")
-                    }
-                }
-            }
-            lastRecordedSystemTime = systemTime
-            lastRecordedElapsedRealtime = elapsedRealtime
+            isTimeFake = false
         }
 
         // -------------------------------------------------------------

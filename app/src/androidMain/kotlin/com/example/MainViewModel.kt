@@ -18,6 +18,7 @@ import com.example.location.MapTileHelper
 import com.example.security.AntiFakeLocationDetector
 import com.example.sync.SpreadsheetSyncManager
 import com.example.sync.SyncResult
+import com.example.notification.NotificationHelper
 import com.example.ui.components.CameraController
 import com.example.util.StorageHelper
 import com.example.watermark.WatermarkConfig
@@ -135,11 +136,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         val currentLocation = locationData.value
                         val freshTime = LocationManager.formatCurrentTime()
                         val freshDate = LocationManager.formatCurrentDate()
+                        val freshSec = AntiFakeLocationDetector.analyzeLocation(context, locationManager.lastRawLocation)
                         val actualLocation = currentLocation.copy(
                             formattedTime = if (currentLocation.formattedTime.isNotEmpty()) currentLocation.formattedTime else freshTime,
-                            formattedDate = if (currentLocation.formattedDate.isNotEmpty()) currentLocation.formattedDate else freshDate
+                            formattedDate = if (currentLocation.formattedDate.isNotEmpty()) currentLocation.formattedDate else freshDate,
+                            securityResult = freshSec
                         )
-                        val secResult = actualLocation.securityResult
+                        val secResult = freshSec
 
                         val config = WatermarkConfig(
                             tagLabel = settings.value.companyTag,
@@ -220,10 +223,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val insertedId = photoDao.insertPhoto(photoRecord)
             val insertedRecord = photoRecord.copy(id = insertedId)
 
+            // 1. Munculkan notifikasi foto berhasil disimpan
+            NotificationHelper.showPhotoSavedNotification(
+                context = context,
+                fileName = savedFile.name,
+                address = insertedRecord.address
+            )
+
             if (settings.value.autoSyncToSpreadsheet) {
                 val syncResult = syncManager.syncPhoto(insertedRecord, settings.value)
                 if (syncResult is SyncResult.Success) {
                     photoDao.updatePhoto(insertedRecord.copy(isSynced = true))
+                    // 2. Munculkan notifikasi foto berhasil tersinkronasi
+                    NotificationHelper.showPhotoSyncedNotification(
+                        context = context,
+                        fileName = savedFile.name,
+                        target = "Google Spreadsheet"
+                    )
                 }
             }
 
@@ -247,6 +263,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val success = syncResult is SyncResult.Success
             if (success) {
                 photoDao.updatePhoto(photo.copy(isSynced = true))
+                val fileName = java.io.File(photo.filePath).name
+                NotificationHelper.showPhotoSyncedNotification(
+                    context = context,
+                    fileName = fileName,
+                    target = "Google Spreadsheet"
+                )
             }
             val msg = when (syncResult) {
                 is SyncResult.Success -> syncResult.message

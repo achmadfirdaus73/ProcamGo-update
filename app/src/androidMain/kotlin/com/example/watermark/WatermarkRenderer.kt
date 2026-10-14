@@ -346,7 +346,7 @@ object WatermarkRenderer {
         }
         val label = when {
             security.isTimeManipulated && security.isMockDetected -> "⚠️ WAKTU & GPS PALSU"
-            security.isTimeManipulated -> "⚠️ WAKTU DIMANIPULASI"
+            security.isTimeManipulated -> "⚠️ WAKTU MANUAL (PALSU)"
             security.isMockDetected -> "⚠️ FAKE GPS"
             else -> "🛡️ ASLI TERVERIFIKASI"
         }

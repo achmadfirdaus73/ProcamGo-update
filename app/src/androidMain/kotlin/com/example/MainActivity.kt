@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.example.notification.NotificationHelper
 import com.example.ui.screens.CameraScreen
 import com.example.ui.screens.GalleryScreen
 import com.example.ui.theme.KolekProCamTheme
@@ -43,6 +44,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        NotificationHelper.initNotificationChannel(this)
 
         setContent {
             KolekProCamTheme {
@@ -53,11 +55,15 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val requiredPermissions = remember {
-                    arrayOf(
+                    val list = mutableListOf(
                         Manifest.permission.CAMERA,
                         Manifest.permission.ACCESS_FINE_LOCATION,
                         Manifest.permission.ACCESS_COARSE_LOCATION
                     )
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        list.add(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                    list.toTypedArray()
                 }
 
                 var hasPermissions by remember {
